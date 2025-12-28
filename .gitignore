@@ -1,2 +1,4 @@
 cover.out
 cover.html
+*.exe
+bin/test_main.go

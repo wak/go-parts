@@ -1,9 +1,10 @@
 package main
 
 import (
-	"go-parts/server"
 	"log/slog"
 	"net/http"
+
+	"go-parts/internal/server"
 )
 
 func main() {
