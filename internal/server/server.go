@@ -32,6 +32,14 @@ func newHandlerSet(initalCount int) *HandlerSet {
 	return &handlerSet
 }
 
+func newCountMiddleware(next http.Handler) (http.Handler, *int) {
+	count := 0 // Mutexが必要
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count += 1
+		next.ServeHTTP(w, r)
+	}), &count
+}
+
 func CreateMux() *http.ServeMux {
 	handlerSet := newHandlerSet(0)
 
