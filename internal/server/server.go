@@ -18,6 +18,10 @@ type HandlerSet struct {
 	common *Common
 }
 
+func okHandler(w http.ResponseWriter, _ *http.Request) {
+	io.WriteString(w, "OK")
+}
+
 func (s *HandlerSet) rootHandler(w http.ResponseWriter, _ *http.Request) {
 	io.WriteString(w, "This is Root.")
 	s.common.count++
@@ -34,7 +38,7 @@ func newHandlerSet(initalCount int) *HandlerSet {
 	return &handlerSet
 }
 
-func newCountMiddleware(next http.Handler) (http.Handler, *int) {
+func newCountMiddleware(next http.Handler) (http.HandlerFunc, *int) {
 	count := 0 // Mutexが必要
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count += 1
@@ -42,7 +46,7 @@ func newCountMiddleware(next http.Handler) (http.Handler, *int) {
 	}), &count
 }
 
-func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
+func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.HandlerFunc {
 	allowedOriginSet := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		normalized := normalizeOrigin(o)

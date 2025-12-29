@@ -17,9 +17,8 @@ func funcName(f any) string {
 }
 
 func Test_CorsMiddleware(t *testing.T) {
-	handlerSet := newHandlerSet(100)
 	handler := NewCorsMiddleware(
-		http.HandlerFunc(handlerSet.rootHandler),
+		http.HandlerFunc(okHandler),
 		[]string{"http://example.jp"},
 	)
 
