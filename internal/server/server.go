@@ -100,12 +100,28 @@ func normalizeOrigin(origin string) string {
 	return u.Scheme + "://" + host + ":" + port
 }
 
+type SecretHealthCheckHandler struct {
+	secret string
+}
+
+func NewSecretHealthCheckHandlerFunc(secret string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sentSecret := r.URL.Query().Get("secret")
+		if secret == sentSecret {
+			io.WriteString(w, "Healthy")
+		} else {
+			http.NotFound(w, r)
+		}
+	}
+}
+
 func CreateMux() *http.ServeMux {
 	handlerSet := newHandlerSet(0)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handlerSet.rootHandler)
 	mux.HandleFunc("/show", handlerSet.showCount)
+	mux.HandleFunc("/healthcheck", NewSecretHealthCheckHandlerFunc("sample"))
 
 	return mux
 }

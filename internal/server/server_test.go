@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -88,6 +89,33 @@ func Test_normalizeOrigin(t *testing.T) {
 		normalized := normalizeOrigin(data.origin)
 		if normalized != data.normalized {
 			t.Errorf("Normalize %s should be %s, but %s.", data.origin, data.normalized, normalized)
+		}
+	}
+}
+
+func Test_HealthCheckHandler(t *testing.T) {
+	testDataSet := []struct {
+		secret string
+		code   int
+	}{
+		{"secret-01", 200},
+		{"secret-02", 404},
+	}
+
+	handler := NewSecretHealthCheckHandlerFunc("secret-01")
+	for _, data := range testDataSet {
+		req := httptest.NewRequest(
+			http.MethodGet,
+			fmt.Sprintf("/?secret=%s", data.secret),
+			nil,
+		)
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+		res := w.Result()
+
+		if res.StatusCode != data.code {
+			t.Errorf("Handler response code != %d (%d)", data.code, res.StatusCode)
 		}
 	}
 }
