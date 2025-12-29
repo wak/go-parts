@@ -16,6 +16,83 @@ func funcName(f any) string {
 	return runtime.FuncForPC(pc).Name()
 }
 
+func Test_CorsMiddleware(t *testing.T) {
+	handlerSet := newHandlerSet(100)
+	handler := NewCorsMiddleware(
+		http.HandlerFunc(handlerSet.rootHandler),
+		[]string{"http://example.jp"},
+	)
+
+	testDataSet := []struct {
+		method        string
+		origin        string
+		shouldSuccess bool
+	}{
+		{http.MethodOptions, "", false},
+		{http.MethodGet, "http://example.net", false},
+		{http.MethodGet, "http://example.jp", true},
+		{http.MethodGet, "http://example.jp:80", true},
+		{http.MethodGet, "http://example.jp:8080", false},
+	}
+	for _, data := range testDataSet {
+		req := httptest.NewRequest(data.method, "/", nil)
+		req.Header.Set("Origin", data.origin)
+		w := httptest.NewRecorder()
+
+		handler.ServeHTTP(w, req)
+		res := w.Result()
+
+		if res.StatusCode != http.StatusOK {
+			t.Errorf("Handler response code != 200 (%d)", res.StatusCode)
+		}
+		acao := res.Header.Get("Access-Control-Allow-Origin")
+		if data.shouldSuccess {
+			if acao != data.origin {
+				t.Errorf("CORS for %s should succeed. (ACAO=%s)", data.origin, acao)
+			}
+		} else {
+			if acao != "" {
+				t.Errorf("CORS for %s should failed. (ACAO=%s)", data.origin, acao)
+			}
+		}
+	}
+}
+
+func Test_CorsMiddlewareWithInvalidConfig(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("expected panic, but did not panic")
+		}
+	}()
+
+	// panic
+	NewCorsMiddleware(
+		http.NotFoundHandler(),
+		[]string{"http://"},
+	)
+}
+
+func Test_normalizeOrigin(t *testing.T) {
+	testDataSet := []struct {
+		origin     string
+		normalized string
+	}{
+		{"", ""},
+		{"ftp://localhost", ""},
+		{"http://example.jp", "http://example.jp:80"},
+		{"http://example.jp:80", "http://example.jp:80"},
+		{"https://example.jp", "https://example.jp:443"},
+		{"https://example.jp:443", "https://example.jp:443"},
+		{"https://example.jp:8080", "https://example.jp:8080"},
+	}
+	for _, data := range testDataSet {
+		normalized := normalizeOrigin(data.origin)
+		if normalized != data.normalized {
+			t.Errorf("Normalize %s should be %s, but %s.", data.origin, data.normalized, normalized)
+		}
+	}
+}
+
 // ハンドラ単体でテストする
 func Test_Handler(t *testing.T) {
 	handlerSet := newHandlerSet(100)

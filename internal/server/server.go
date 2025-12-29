@@ -3,7 +3,9 @@ package server
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 )
 
 type Common struct {
@@ -38,6 +40,60 @@ func newCountMiddleware(next http.Handler) (http.Handler, *int) {
 		count += 1
 		next.ServeHTTP(w, r)
 	}), &count
+}
+
+func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
+	allowedOriginSet := make(map[string]struct{}, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		normalized := normalizeOrigin(o)
+		if normalized == "" {
+			panic(fmt.Sprintf("Invalid CORS origin: %s", o))
+		}
+		allowedOriginSet[normalized] = struct{}{}
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			normalizedOrigin := normalizeOrigin(origin)
+			if _, ok := allowedOriginSet[normalizedOrigin]; ok {
+				log.Println("CORS: origin accepted.")
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			} else {
+				log.Printf("CORS: origin denied. (origin=%s)\n", origin)
+			}
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func normalizeOrigin(origin string) string {
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		default:
+			return ""
+		}
+	}
+	return u.Scheme + "://" + host + ":" + port
 }
 
 func CreateMux() *http.ServeMux {
