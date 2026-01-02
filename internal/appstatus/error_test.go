@@ -49,10 +49,13 @@ func Test_WrapStack(t *testing.T) {
 	}
 }
 
-func Test_NewError(t *testing.T) {
+func Test_ErrorFormat(t *testing.T) {
 	e := NewError("stack error")
-
-	if e == nil {
-		t.Error("NewError() must return error.")
+	e = fmt.Errorf("wrapped %s", NewError("stack error"))
+	formatted := fmt.Sprintf("wrapped %s", e)
+	if !strings.Contains(formatted, "stack error") ||
+		!strings.Contains(formatted, "Test_ErrorFormat") ||
+		!strings.Contains(formatted, "error_test.go") {
+		t.Errorf("fmt %%s invlid: %s", formatted)
 	}
 }

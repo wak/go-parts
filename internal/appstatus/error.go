@@ -3,10 +3,12 @@ package appstatus
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
 
+// build時に-trimpathをつけると、相対パスになる。
 type errorWithStack struct {
 	Err   error
 	Stack []uintptr
@@ -26,11 +28,20 @@ func WrapStack(err error) error {
 }
 
 func NewError(message string) error {
-	return WrapStack(errors.New(message))
+	return &errorWithStack{
+		Err:   errors.New(message),
+		Stack: stack(3),
+	}
 }
 
 func (e *errorWithStack) Error() string {
-	return e.Err.Error()
+	frames := runtime.CallersFrames(e.Stack)
+	frame, _ := frames.Next()
+	file := filepath.Base(frame.File)
+	funcname := frame.Function[strings.LastIndex(frame.Function, ".")+1:]
+	short := fmt.Sprintf("%s:%d:%s", file, frame.Line, funcname)
+
+	return fmt.Sprintf("%s (%s)", e.Err.Error(), short)
 }
 
 func (e *errorWithStack) Unwrap() error {
