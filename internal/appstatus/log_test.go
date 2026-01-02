@@ -54,7 +54,7 @@ func Test_ErrorWithStackLog(t *testing.T) {
 	logger := NewSlogLogger(&buf)
 
 	e := errors.New("e1")
-	e = fmt.Errorf("w %w %w", e, NewErrorWithStack(errors.New("e2")))
+	e = fmt.Errorf("w %w %w", e, WrapStack(errors.New("e2")))
 	logger.Info("stack log test", "error", e)
 	if !strings.Contains(buf.String(), "stacktrace") {
 		t.Errorf("stacktrace not found: %s", buf.String())
@@ -74,10 +74,10 @@ func Test_ErrorWithoutStackLog(t *testing.T) {
 
 func Test_findErrorWithStack(t *testing.T) {
 	newError := func(e error) error {
-		return NewErrorWithStack(e)
+		return WrapStack(e)
 	}
 	e1 := errors.New("e1")
-	es1 := NewErrorWithStack(errors.New("es1"))
+	es1 := WrapStack(errors.New("es1"))
 	es2 := newError(errors.New("es2"))
 	joined1 := errors.Join(e1, es1)
 

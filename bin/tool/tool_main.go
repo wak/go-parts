@@ -33,7 +33,7 @@ func runLog() {
 		s.Error("slog.Error()", "int", 1, "string", "s")
 		s.Error("slog.Error()", "simple error", errors.New("simple error"))
 
-		myerror := appstatus.NewErrorWithStack(errors.New("myerror"))
+		myerror := appstatus.WrapStack(errors.New("myerror"))
 		myerror = errors.Join(myerror, errors.New("joined"))
 		s.Error("slog.Error()", "error with stack", myerror)
 	}

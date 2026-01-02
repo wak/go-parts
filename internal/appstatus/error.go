@@ -1,6 +1,7 @@
 package appstatus
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -17,11 +18,15 @@ func stack(skip int) []uintptr {
 	return pcs[:n]
 }
 
-func NewErrorWithStack(err error) error {
+func WrapStack(err error) error {
 	return &errorWithStack{
 		Err:   err,
 		Stack: stack(3),
 	}
+}
+
+func NewError(message string) error {
+	return WrapStack(errors.New(message))
 }
 
 func (e *errorWithStack) Error() string {
