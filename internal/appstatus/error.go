@@ -91,21 +91,6 @@ func findErrorWithStack(err error) *errorWithStack {
 	return deepestError
 }
 
-func formatStack(pcs []uintptr) string {
-	frames := runtime.CallersFrames(pcs)
-	var b strings.Builder
-	fmt.Fprintf(&b, "============== STACK TRACE ==============\n")
-	for {
-		frame, more := frames.Next()
-		fmt.Fprintf(&b, "= %s\n=\t%s:%d\n", frame.Function, frame.File, frame.Line)
-		if !more {
-			break
-		}
-	}
-	fmt.Fprintf(&b, "=========================================")
-	return b.String()
-}
-
 func DumpError(err error) string {
 	if err == nil {
 		return ""
@@ -133,7 +118,18 @@ func DumpError(err error) string {
 
 		// スタックトレースがあれば表示
 		if m, ok := e.(*errorWithStack); ok {
-			fmt.Fprintf(&b, "\n--\n(%T) %v\n%s", e, e, formatStack(m.Stack))
+			fmt.Fprintf(&b, "\n--\n(%T) %v", e, e)
+
+			frames := runtime.CallersFrames(m.Stack)
+			fmt.Fprintf(&b, "\n============== STACK TRACE ==============\n")
+			for {
+				frame, more := frames.Next()
+				fmt.Fprintf(&b, "= %s\n=\t%s:%d\n", frame.Function, frame.File, frame.Line)
+				if !more {
+					break
+				}
+			}
+			fmt.Fprintf(&b, "=========================================")
 		}
 
 		// Join
