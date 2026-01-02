@@ -32,6 +32,60 @@ func (e *errorWithStack) Unwrap() error {
 	return e.Err
 }
 
+func findErrorWithStack(err error) *errorWithStack {
+	if err == nil {
+		return nil
+	}
+
+	errors := []error{err}
+	visited := map[error]struct{}{}
+	errorWithStacks := []*errorWithStack{}
+
+	for len(errors) > 0 {
+		// POP
+		e := errors[len(errors)-1]
+		errors = errors[:len(errors)-1]
+
+		// 循環対策
+		if _, ok := visited[e]; ok {
+			continue
+		} else {
+			visited[e] = struct{}{}
+		}
+
+		if m, ok := e.(*errorWithStack); ok {
+			errorWithStacks = append(errorWithStacks, m)
+		}
+
+		// Join
+		if m, ok := e.(interface{ Unwrap() []error }); ok {
+			for _, child := range m.Unwrap() {
+				errors = append(errors, child)
+			}
+		}
+
+		// Wrap
+		if u, ok := e.(interface{ Unwrap() error }); ok {
+			child := u.Unwrap()
+			if child != nil {
+				errors = append(errors, child)
+			}
+		}
+	}
+
+	if len(errorWithStacks) == 0 {
+		return nil
+	}
+
+	var deepestError *errorWithStack = errorWithStacks[0]
+	for _, e := range errorWithStacks {
+		if len(deepestError.Stack) < len(e.Stack) {
+			deepestError = e
+		}
+	}
+	return deepestError
+}
+
 func formatStack(pcs []uintptr) string {
 	frames := runtime.CallersFrames(pcs)
 	var b strings.Builder
@@ -46,14 +100,6 @@ func formatStack(pcs []uintptr) string {
 	fmt.Fprintf(&b, "=========================================")
 	return b.String()
 }
-
-// func (e *errorWithStack) Format(s fmt.State, verb rune) {
-// 	if verb == 'v' && s.Flag('+') {
-// 		fmt.Fprintf(s, "%v\n%s\n", e.Err, formatStack(e.Stack))
-// 		return
-// 	}
-// 	fmt.Fprintf(s, "%"+string(verb), e.Err)
-// }
 
 func DumpError(err error) string {
 	if err == nil {
