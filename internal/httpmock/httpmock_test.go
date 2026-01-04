@@ -38,71 +38,24 @@ func post(t *testing.T, url string, path string, contentType string, body string
 
 func Test_ServerRun(t *testing.T) {
 	server := Start([]BuildablePathConfig{
-		PathConfig{
-			Path: "/text",
-			Method: map[string]Response{
-				http.MethodGet: []Response{TextResponse{Text: "sample text"}},
-			},
-		},
-		PathConfig{
-			Path: "/json_r",
-			Method: map[string]Response{
-				http.MethodGet: JsonResponse{
-					Raw: map[string]interface{}{
-						"path":  "/json",
-						"value": "json raw",
-					},
-				},
-			},
-		},
-		PathConfig{
-			Path: "/json_t",
-			Method: map[string]Response{
-				http.MethodGet: JsonResponse{Text: "123"},
-			},
-		},
-		PathConfig{
-			Path: "/linear",
-			Method: map[string]Response{
-				http.MethodGet: LinearResponse{
-					Responses: []Response{
-						TextResponse{Text: "text 1"},
-						TextResponse{Text: "text 2"},
-						TextResponse{Text: "text 3"},
-					},
-				},
-			},
-		},
-		PathConfig{
-			Path: "/custom_t",
-			Method: map[string]Response{
-				http.MethodGet: FuncResponse{
-					Text: func(c CustomParam, _ *http.Request) string {
-						return fmt.Sprintf("custom_t %d", c.Count)
-					},
-				},
-			},
-		},
-		PathConfig{
-			Path: "/custom_j",
-			Method: map[string]Response{
-				http.MethodGet: FuncResponse{
-					Json: func(c CustomParam, _ *http.Request) interface{} {
-						return fmt.Sprintf("custom_j %d", c.Count)
-					},
-				},
-			},
-		},
-		PathConfig{
-			Path: "/custom_h",
-			Method: map[string]Response{
-				http.MethodGet: FuncResponse{
-					Handler: func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
-						io.WriteString(w, "handler func")
-					},
-				},
-			},
-		},
+		Path("/text").Get().Text("sample text"),
+		Path("/json_r").Get().Json(map[string]interface{}{
+			"path":  "/json",
+			"value": "json raw",
+		}),
+		Path("/json_t").Get().JsonS("123"),
+		Path("/linear").Get().
+			Text("text 1").
+			Text("text 2").
+			Text("text 3"),
+		Path("/handler_1").Get().
+			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
+				io.WriteString(w, fmt.Sprintf("handler_1 %d", c.Count))
+			}),
+		Path("/handler_2").Get().
+			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
+				io.WriteString(w, fmt.Sprintf("handler_2 %d", c.Count))
+			}),
 	})
 	defer server.Close()
 
@@ -123,11 +76,10 @@ func Test_ServerRun(t *testing.T) {
 	check_get("/linear", "text 3")
 	check_get("/linear", "text 1")
 
-	check_get("/custom_t", "custom_t 1")
-	check_get("/custom_j", "\"custom_j 1\"\n")
-	check_get("/custom_t", "custom_t 2")
-	check_get("/custom_j", "\"custom_j 2\"\n")
-	check_get("/custom_h", "handler func")
+	check_get("/handler_1", "handler_1 1")
+	check_get("/handler_2", "handler_2 1")
+	check_get("/handler_1", "handler_1 2")
+	check_get("/handler_2", "handler_2 2")
 }
 
 func Test_Builder(t *testing.T) {
