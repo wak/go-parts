@@ -1,9 +1,11 @@
 package httpmock
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -164,9 +166,45 @@ func Test_F_Panic(t *testing.T) {
 	_ = F("this-file-should-not-exist.txt")
 }
 
+func Test_projectRoot_panic(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic but did not panic")
+		}
+		if r != "Cannot detect project root." {
+			t.Fatal("not targetted panic")
+		}
+	}()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(old) }()
+
+	projectRoot(os.Getwd)
+}
+
+func Test_projectRoot_panic_getwd(t *testing.T) {
+	err := errors.New("failed")
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic but did not panic")
+		}
+		if r != err {
+			t.Fatal("not targetted panic")
+		}
+	}()
+	projectRoot(func() (string, error) { return "", err })
+}
 func Test_F(t *testing.T) {
-	text := F("httpmock_test.go")
-	if text[0:7] != "package" {
+	text := F("go.mod")
+	if text[0:6] != "module" {
 		t.Errorf("invalid heading: %s", text[0:7])
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 )
 
 type Server struct {
@@ -154,12 +155,33 @@ func (b *PathConfigBuilder) Build() PathConfig {
 	return b.PathConfig
 }
 
-func F(path string) string {
-	b, err := os.ReadFile(path)
+func F(relpath string) string {
+	pathFromProjectRoot := filepath.Join(projectRoot(os.Getwd), relpath)
+	b, err := os.ReadFile(pathFromProjectRoot)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to open %s: %v", path, err))
+		panic(fmt.Sprintf("Failed to open %s: %v", pathFromProjectRoot, err))
 	}
 	return string(b)
+}
+
+func projectRoot(getwd func() (string, error)) string {
+	dir, err := getwd()
+	if err != nil {
+		panic(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	panic("Cannot detect project root.")
 }
 
 func handleRequest(config PathConfig, entryStatus *EntryStatus, w http.ResponseWriter, r *http.Request) {
