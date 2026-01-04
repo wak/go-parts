@@ -223,3 +223,16 @@ func Test_start_panic(t *testing.T) {
 
 	get(t, server.URL, "/json")
 }
+
+func Test_panic_method_not_defined(t *testing.T) {
+	server := Start([]BuildablePathConfig{
+		Path("/").Get().Text("get"),
+	})
+	defer server.Close()
+
+	code, _, body := del(t, server.URL, "/")
+	if !strings.HasPrefix(body, "Method DELETE for /") ||
+		code != 599 {
+		t.Errorf("response is invalid: %d, %s", code, body)
+	}
+}

@@ -190,7 +190,9 @@ func handleRequest(config PathConfig, entryStatus *EntryStatus, w http.ResponseW
 
 	response, ok := config.Method[r.Method]
 	if !ok {
-		panic(fmt.Sprintf("Method %s for %s not configured.", r.Method, config.Path))
+		w.WriteHeader(599)
+		io.WriteString(w, fmt.Sprintf("Method %s for %s not configured.", r.Method, config.Path))
+		return
 	}
 
 	processResponse(config, entryStatus, count, response, w, r)
