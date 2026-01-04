@@ -45,21 +45,21 @@ func del(t *testing.T, url string, path string) (int, http.Header, string) {
 
 func Test_ServerRun(t *testing.T) {
 	server := Start([]BuildablePathConfig{
-		Path("/text").Get().Text("sample text"),
-		Path("/json_r").Get().Json(map[string]interface{}{
+		Path("/text").Text("sample text"),
+		Path("/json_r").Json(map[string]interface{}{
 			"path":  "/json",
 			"value": "json raw",
 		}),
-		Path("/json_t").Get().JsonS("123"),
-		Path("/linear").Get().
+		Path("/json_t").JsonS("123"),
+		Path("/linear").
 			Text("text 1").
 			Text("text 2").
 			Text("text 3"),
-		Path("/handler_1").Get().
+		Path("/handler_1").
 			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
 				io.WriteString(w, fmt.Sprintf("handler_1 %d", c.Count))
 			}),
-		Path("/handler_2").Get().
+		Path("/handler_2").
 			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
 				io.WriteString(w, fmt.Sprintf("handler_2 %d", c.Count))
 			}),
@@ -152,4 +152,36 @@ func Test_AllMethods(t *testing.T) {
 	check_post("/", "dummy", "post")
 	check_del("/", "delete")
 	check_put("/", "dummy", "put")
+}
+
+func Test_F_Panic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic but did not panic")
+		}
+	}()
+
+	_ = F("this-file-should-not-exist.txt")
+}
+
+func Test_F(t *testing.T) {
+	text := F("httpmock_test.go")
+	if text[0:7] != "package" {
+		t.Errorf("invalid heading: %s", text[0:7])
+	}
+}
+
+func Test_start_panic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic but did not panic")
+		}
+	}()
+
+	server := Start([]BuildablePathConfig{
+		Path("/json").Json(func() {}),
+	})
+	defer server.Close()
+
+	get(t, server.URL, "/json")
 }

@@ -154,10 +154,6 @@ func (b *PathConfigBuilder) Build() PathConfig {
 	return b.PathConfig
 }
 
-func (p PathConfig) Build() PathConfig {
-	return p
-}
-
 func F(path string) string {
 	b, err := os.ReadFile(path)
 	if err != nil {
