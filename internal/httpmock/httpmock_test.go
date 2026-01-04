@@ -76,7 +76,7 @@ func Test_ServerRun(t *testing.T) {
 
 	check_get("/text", "sample text")
 	check_get("/json_t", "123")
-	if _, _, v := get(t, server.URL, "/json_r"); v[0:1] != "{" {
+	if _, _, v := get(t, server.URL, "/json_r"); !strings.HasPrefix(v, "{") {
 		t.Errorf("Invalid json handler response /json_r: %s", v)
 	}
 
@@ -204,7 +204,7 @@ func Test_projectRoot_panic_getwd(t *testing.T) {
 }
 func Test_F(t *testing.T) {
 	text := F("go.mod")
-	if text[0:6] != "module" {
+	if !strings.HasPrefix(text, "module") {
 		t.Errorf("invalid heading: %s", text[0:7])
 	}
 }
