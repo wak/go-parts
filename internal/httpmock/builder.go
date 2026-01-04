@@ -16,18 +16,9 @@ type Server struct {
 
 type Response interface{}
 
-// type Response struct {
-// 	Text        *string
-// 	Json        interface{}
-// 	JsonText    *string
-// 	FuncText    func(CustomParam, *http.Request) string
-// 	FuncJsonRaw func(CustomParam, *http.Request) interface{}
-// 	FuncHandler func(CustomParam, http.ResponseWriter, *http.Request)
-// }
-
-// func S(s string) *string {
-// 	return &s
-// }
+type LinearResponse struct {
+	Responses []Response
+}
 
 type TextResponse struct {
 	Text string
@@ -49,8 +40,9 @@ type EntryConfig struct {
 	GetMethod Response
 }
 
-type Count struct {
-	Get int
+type EntryStatus struct {
+	GetCount       int
+	LinearPosition map[string]int
 }
 
 type CustomParam struct {
@@ -98,7 +90,29 @@ func handleFunc(resp FuncResponse, count int, w http.ResponseWriter, r *http.Req
 	}
 }
 
-func handleRequest(_ EntryConfig, response Response, count int, w http.ResponseWriter, r *http.Request) {
+func handleRequest(config EntryConfig, entryStatus *EntryStatus, w http.ResponseWriter, r *http.Request) {
+	var count int
+	var response Response
+
+	switch r.Method {
+	case http.MethodGet:
+		response = config.GetMethod
+		entryStatus.GetCount++
+		count = entryStatus.GetCount
+	default:
+		panic(fmt.Sprintf("Method %s not implement.", r.Method))
+	}
+	if response == nil {
+		panic(fmt.Sprintf("Method %s for %s not configured.", r.Method, config.Path))
+	}
+	processResponse(config, entryStatus, count, response, w, r)
+}
+
+func processResponse(
+	config EntryConfig, entryStatus *EntryStatus,
+	count int, response Response,
+	w http.ResponseWriter, r *http.Request,
+) {
 	switch res := response.(type) {
 	case TextResponse:
 		handleText(res, w, r)
@@ -106,8 +120,17 @@ func handleRequest(_ EntryConfig, response Response, count int, w http.ResponseW
 		handleJson(res, w, r)
 	case FuncResponse:
 		handleFunc(res, count, w, r)
-	default:
-		panic(fmt.Sprintf("Unknown response type: %T", response))
+	case LinearResponse:
+		if _, ok := entryStatus.LinearPosition[r.Method]; !ok {
+			entryStatus.LinearPosition[r.Method] = 0
+		}
+
+		r2 := res.Responses[entryStatus.LinearPosition[r.Method]%len(res.Responses)]
+		if _, ok := r2.(LinearResponse); ok {
+			panic(fmt.Sprintf("LinearResponse in LinearResponse is not supported. (%s)", config.Path))
+		}
+		entryStatus.LinearPosition[r.Method]++
+		processResponse(config, entryStatus, count, r2, w, r)
 	}
 }
 
@@ -115,15 +138,11 @@ func Start(configs []EntryConfig) Server {
 	mux := http.NewServeMux()
 
 	for _, config := range configs {
-		var count Count
+		entryStatus := EntryStatus{
+			LinearPosition: make(map[string]int),
+		}
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				count.Get++
-				handleRequest(config, config.GetMethod, count.Get, w, r)
-			default:
-				panic(fmt.Sprintf("Method %s for %s not configured.", r.Method, config.Path))
-			}
+			handleRequest(config, &entryStatus, w, r)
 		}
 
 		mux.HandleFunc(config.Path, handler)

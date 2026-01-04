@@ -25,6 +25,16 @@ func Test_ServerRun(t *testing.T) {
 			GetMethod: JsonResponse{Text: "123"},
 		},
 		{
+			Path: "/linear",
+			GetMethod: LinearResponse{
+				Responses: []Response{
+					TextResponse{Text: "text 1"},
+					TextResponse{Text: "text 2"},
+					TextResponse{Text: "text 3"},
+				},
+			},
+		},
+		{
 			Path: "/custom_t",
 			GetMethod: FuncResponse{Text: func(c CustomParam, _ *http.Request) string {
 				return fmt.Sprintf("custom_t %d", c.Count)
@@ -69,6 +79,11 @@ func Test_ServerRun(t *testing.T) {
 	if v := get("/json_r"); v[0:1] != "{" {
 		t.Errorf("Invalid json handler response /json_r: %s", v)
 	}
+
+	check_get("/linear", "text 1")
+	check_get("/linear", "text 2")
+	check_get("/linear", "text 3")
+	check_get("/linear", "text 1")
 
 	check_get("/custom_t", "custom_t 1")
 	check_get("/custom_j", "\"custom_j 1\"\n")
