@@ -14,7 +14,6 @@ type Server struct {
 	server *httptest.Server
 }
 
-// type Response interface{}
 type BuildablePathConfig interface {
 	Build() PathConfig
 }
@@ -134,6 +133,11 @@ func (b *PathConfigBuilder) Handler(f func(CustomParam, http.ResponseWriter, *ht
 
 func (b *PathConfigBuilder) Status(status int) *PathConfigBuilder {
 	b.building.responses[len(b.building.responses)-1].Status = status
+	return b
+}
+
+func (b *PathConfigBuilder) ContentType(contentType string) *PathConfigBuilder {
+	b.building.responses[len(b.building.responses)-1].ContentType = contentType
 	return b
 }
 

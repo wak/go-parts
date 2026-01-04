@@ -8,23 +8,15 @@ import (
 	"testing"
 )
 
-func get(t *testing.T, url string, path string) string {
-	res, err := http.Get(url + path)
+func request(t *testing.T, method string, url string, path string, body string) (int, http.Header, string) {
+	req, err := http.NewRequest(method, url+path, strings.NewReader(body))
 	if err != nil {
-		t.Fatalf("Failed GET %s", path)
+		t.Fatalf("Failed to create %s request %s: %v", method, path, err)
 	}
-	responseBody, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		t.Fatalf("Failed to read response of %s", path)
-	}
-	return string(responseBody)
-}
 
-func post(t *testing.T, url string, path string, contentType string, body string) string {
-	res, err := http.Post(url+path, contentType, strings.NewReader(body))
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("Failed POST %s: %v", path, err)
+		t.Fatalf("Failed %s %s: %v", method, path, err)
 	}
 
 	responseBody, err := io.ReadAll(res.Body)
@@ -32,8 +24,23 @@ func post(t *testing.T, url string, path string, contentType string, body string
 	if err != nil {
 		t.Fatalf("Failed to read response of %s: %v", path, err)
 	}
+	return res.StatusCode, res.Header, string(responseBody)
+}
 
-	return string(responseBody)
+func get(t *testing.T, url string, path string) (int, http.Header, string) {
+	return request(t, http.MethodGet, url, path, "")
+}
+
+func post(t *testing.T, url string, path string, body string) (int, http.Header, string) {
+	return request(t, http.MethodPost, url, path, body)
+}
+
+func put(t *testing.T, url string, path string, body string) (int, http.Header, string) {
+	return request(t, http.MethodPut, url, path, body)
+}
+
+func del(t *testing.T, url string, path string) (int, http.Header, string) {
+	return request(t, http.MethodDelete, url, path, "")
 }
 
 func Test_ServerRun(t *testing.T) {
@@ -60,14 +67,14 @@ func Test_ServerRun(t *testing.T) {
 	defer server.Close()
 
 	check_get := func(path string, expected string) {
-		if v := get(t, server.URL, path); v != expected {
+		if _, _, v := get(t, server.URL, path); v != expected {
 			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
 		}
 	}
 
 	check_get("/text", "sample text")
 	check_get("/json_t", "123")
-	if v := get(t, server.URL, "/json_r"); v[0:1] != "{" {
+	if _, _, v := get(t, server.URL, "/json_r"); v[0:1] != "{" {
 		t.Errorf("Invalid json handler response /json_r: %s", v)
 	}
 
@@ -82,14 +89,35 @@ func Test_ServerRun(t *testing.T) {
 	check_get("/handler_2", "handler_2 2")
 }
 
-func Test_Builder(t *testing.T) {
+func Test_Attributes(t *testing.T) {
 	server := Start([]BuildablePathConfig{
 		Path("/text").
 			Get().
 			Text("text 1").
-			Text("text 2").Status(http.StatusForbidden),
-		Path("/json").Get().Json(111),
-		Path("/all_method").
+			Status(http.StatusForbidden).
+			ContentType("sampletype"),
+	})
+	defer server.Close()
+
+	check_get := func(path string, expectedCode int, expectedContentType string, expectedBody string) {
+		code, header, body := get(t, server.URL, path)
+		if body != expectedBody {
+			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expectedBody, body)
+		}
+		if code != expectedCode {
+			t.Errorf("Invalid handler (%s) response. expected: %d but actual: %d", path, expectedCode, code)
+		}
+		if header.Get("Content-Type") != expectedContentType {
+			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expectedContentType, header.Get("Content-Type"))
+		}
+	}
+
+	check_get("/text", http.StatusForbidden, "sampletype", "text 1")
+}
+
+func Test_AllMethods(t *testing.T) {
+	server := Start([]BuildablePathConfig{
+		Path("/").
 			Get().Text("get").
 			Post().Text("post").
 			Delete().Text("delete").
@@ -98,21 +126,30 @@ func Test_Builder(t *testing.T) {
 	defer server.Close()
 
 	check_get := func(path string, expected string) {
-		if v := get(t, server.URL, path); v != expected {
+		if _, _, v := get(t, server.URL, path); v != expected {
 			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
 		}
 	}
 
 	check_post := func(path string, body string, expected string) {
-		if v := post(t, server.URL, path, "text/plain; charset=utf-8", body); v != expected {
+		if _, _, v := post(t, server.URL, path, body); v != expected {
 			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
 		}
 	}
 
-	check_get("/text", "text 1")
-	check_get("/text", "text 2")
-	check_get("/json", "111")
+	check_put := func(path string, body string, expected string) {
+		if _, _, v := put(t, server.URL, path, body); v != expected {
+			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
+		}
+	}
 
-	check_get("/all_method", "get")
-	check_post("/all_method", "dummy", "post")
+	check_del := func(path string, expected string) {
+		if _, _, v := del(t, server.URL, path); v != expected {
+			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
+		}
+	}
+	check_get("/", "get")
+	check_post("/", "dummy", "post")
+	check_del("/", "delete")
+	check_put("/", "dummy", "put")
 }
