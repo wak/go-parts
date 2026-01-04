@@ -119,6 +119,20 @@ func (b *PathConfigBuilder) JsonS(jsons string) *PathConfigBuilder {
 	return b
 }
 
+func (b *PathConfigBuilder) Xml(xml string) *PathConfigBuilder {
+	if b.building.method == "" {
+		b.Get()
+	}
+	b.building.responses = append(
+		b.building.responses,
+		ResponseConfig{
+			Body:        xml,
+			ContentType: "application/xml; charset=utf-8",
+		},
+	)
+	return b
+}
+
 func (b *PathConfigBuilder) Handler(f func(CustomParam, http.ResponseWriter, *http.Request)) *PathConfigBuilder {
 	if b.building.method == "" {
 		b.Get()

@@ -45,7 +45,7 @@ func del(t *testing.T, url string, path string) (int, http.Header, string) {
 	return request(t, http.MethodDelete, url, path, "")
 }
 
-func Test_ServerRun(t *testing.T) {
+func Test_helper(t *testing.T) {
 	server := Start([]BuildablePathConfig{
 		Path("/text").Text("sample text"),
 		Path("/json_r").Json(map[string]interface{}{
@@ -53,6 +53,7 @@ func Test_ServerRun(t *testing.T) {
 			"value": "json raw",
 		}),
 		Path("/json_t").JsonS("123"),
+		Path("/xml").Xml("<t></t>"),
 		Path("/linear").
 			Text("text 1").
 			Text("text 2").
@@ -68,27 +69,32 @@ func Test_ServerRun(t *testing.T) {
 	})
 	defer server.Close()
 
-	check_get := func(path string, expected string) {
-		if _, _, v := get(t, server.URL, path); v != expected {
-			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, v)
+	check_get := func(path string, expected string, contentType string) {
+		_, header, body := get(t, server.URL, path)
+		if body != expected {
+			t.Errorf("Invalid handler (%s) response. expected: %q but actual: %q", path, expected, body)
+		}
+		if !strings.HasPrefix(header.Get("Content-Type"), contentType) {
+			t.Errorf("Invalid handler (%s) Content-Type response. expected: %q but actual: %q", path, header.Get("Content-Type"), contentType)
 		}
 	}
 
-	check_get("/text", "sample text")
-	check_get("/json_t", "123")
-	if _, _, v := get(t, server.URL, "/json_r"); !strings.HasPrefix(v, "{") {
-		t.Errorf("Invalid json handler response /json_r: %s", v)
+	check_get("/text", "sample text", "text/plain")
+	check_get("/json_t", "123", "application/json")
+	if _, header, v := get(t, server.URL, "/json_r"); !strings.HasPrefix(v, "{") || !strings.HasPrefix(header.Get("Content-Type"), "application/json") {
+		t.Errorf("Invalid json handler response /json_r: %s, %s", v, header.Get("Content-Type"))
 	}
+	check_get("/xml", "<t></t>", "application/xml")
 
-	check_get("/linear", "text 1")
-	check_get("/linear", "text 2")
-	check_get("/linear", "text 3")
-	check_get("/linear", "text 1")
+	check_get("/linear", "text 1", "text/plain")
+	check_get("/linear", "text 2", "text/plain")
+	check_get("/linear", "text 3", "text/plain")
+	check_get("/linear", "text 1", "text/plain")
 
-	check_get("/handler_1", "handler_1 1")
-	check_get("/handler_2", "handler_2 1")
-	check_get("/handler_1", "handler_1 2")
-	check_get("/handler_2", "handler_2 2")
+	check_get("/handler_1", "handler_1 1", "")
+	check_get("/handler_2", "handler_2 1", "")
+	check_get("/handler_1", "handler_1 2", "")
+	check_get("/handler_2", "handler_2 2", "")
 }
 
 func Test_Attributes(t *testing.T) {
