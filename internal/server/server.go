@@ -61,7 +61,15 @@ func NewHandlePanicMiddleware(next http.Handler) http.HandlerFunc {
 	})
 }
 
-func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.HandlerFunc {
+type CorsResult int
+
+const (
+	CorsResultOk CorsResult = iota
+	CorsResultBad
+	CorsResultNone
+)
+
+func newCorsChecker(allowedOrigins []string) func(string) CorsResult {
 	allowedOriginSet := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		normalized := normalizeOrigin(o)
@@ -71,20 +79,34 @@ func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.HandlerF
 		allowedOriginSet[normalized] = struct{}{}
 	}
 
+	return func(origin string) CorsResult {
+		if origin == "" {
+			return CorsResultNone
+		}
+		normalizedOrigin := normalizeOrigin(origin)
+		if _, ok := allowedOriginSet[normalizedOrigin]; ok {
+			return CorsResultOk
+		} else {
+			return CorsResultBad
+		}
+	}
+}
+
+func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.HandlerFunc {
+	corsChecker := newCorsChecker(allowedOrigins)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
-			normalizedOrigin := normalizeOrigin(origin)
-			if _, ok := allowedOriginSet[normalizedOrigin]; ok {
-				log.Println("CORS: origin accepted.")
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			} else {
-				log.Printf("CORS: origin denied. (origin=%s)\n", origin)
-			}
+		switch corsChecker(origin) {
+		case CorsResultOk:
+			log.Printf("CORS: origin accepted. (origin=%s)\n", origin)
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		case CorsResultBad:
+			log.Printf("CORS: origin denied. (origin=%s)\n", origin)
+		case CorsResultNone:
+			// log.Printf("CORS: origin not specified\n")
 		}
-
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return

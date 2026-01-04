@@ -26,9 +26,59 @@ func (f fakeSendErrorIO) Send(ws *websocket.Conn, v any) error {
 	return errors.New("failed")
 }
 
+func Test_WebSocket_Origin(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("/ws", NewWsEchoHttpHandler([]string{"http://example.co.jp:8080"}))
+
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+
+	testDataSet := []struct {
+		origin         string
+		connectSuccess bool
+	}{
+		{"http://example.co.jp:8080", true},
+		{"http://example.co.jp", false},
+		{"http://example.com:8080", false},
+		// {"", false}, // Originを空にしてリクエストは出せない(クライアント側でエラー)
+	}
+	for _, data := range testDataSet {
+		ws, err := websocket.Dial(wsURL, "", data.origin)
+
+		if data.connectSuccess {
+			if err != nil {
+				t.Fatalf("Dial failed: %v", err)
+				continue
+			}
+		} else {
+			if err == nil {
+				t.Errorf("Dial must failed but connected: origin=%s", data.origin)
+				continue
+			}
+			continue
+		}
+		t.Cleanup(func() { _ = ws.Close() })
+
+		if err := websocket.Message.Send(ws, "hello"); err != nil {
+			t.Fatalf("Send websocket message failed: %v", err)
+		}
+
+		var got string
+		if err := websocket.Message.Receive(ws, &got); err != nil {
+			t.Fatalf("Receive websocket message failed: %v", err)
+		}
+
+		if got != "hello" {
+			t.Fatalf("Received websocket message error: %s", got)
+		}
+	}
+}
+
 func Test_WebSocket_Echo(t *testing.T) {
 	mux := http.NewServeMux()
-	h := newWsEchoHandler()
+	h := newWsEchoWebSocketHandler(xnetWSIO{})
 	mux.Handle("/ws", websocket.Handler(h))
 
 	ts := httptest.NewServer(mux)
@@ -60,7 +110,7 @@ func Test_WebSocket_Echo(t *testing.T) {
 
 func Test_WebSocket_Echo_SendError(t *testing.T) {
 	mux := http.NewServeMux()
-	h := newWsEchoHandlerRaw(fakeReceiveErrorIO{})
+	h := newWsEchoWebSocketHandler(fakeReceiveErrorIO{})
 	mux.Handle("/ws", websocket.Handler(h))
 
 	ts := httptest.NewServer(mux)
@@ -87,7 +137,7 @@ func Test_WebSocket_Echo_SendError(t *testing.T) {
 
 func Test_WebSocket_Echo_ReceiveError(t *testing.T) {
 	mux := http.NewServeMux()
-	h := newWsEchoHandlerRaw(fakeSendErrorIO{})
+	h := newWsEchoWebSocketHandler(fakeSendErrorIO{})
 	mux.Handle("/ws", websocket.Handler(h))
 
 	ts := httptest.NewServer(mux)

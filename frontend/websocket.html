@@ -1,0 +1,37 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <p>WebSocketテスト</p>
+    <input id="type">
+	<input id="message">
+  </body>
+</html>
+
+<script type="text/javascript">
+    var conn = new WebSocket("ws://localhost:8080/ws");
+
+	conn.onopen = function(event) {
+		document.getElementById("type").value = "onopen";
+		document.getElementById("message").value = event.data;
+        conn.send("こんにちは");
+	};
+	 
+	conn.onerror = function(error) {
+		document.getElementById("type").value = "onerror";
+		document.getElementById("message").value = error.data;
+	};
+	 
+	conn.onmessage = function(event) {
+		document.getElementById("type").value = "onmessage";
+		document.getElementById("message").value = event.data;
+	};
+	  
+	conn.onclose = function() {
+		document.getElementById("type").value = "onclose";
+		document.getElementById("message").value = "";
+	};
+</script>

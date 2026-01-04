@@ -9,8 +9,13 @@ import (
 )
 
 func main() {
+	cors := []string{"http://localhost:8080"}
 	mux := server.CreateMux()
-	handler := server.NewCorsMiddleware(mux, []string{"http://localhost:8080"})
+	mux.Handle("/frontend/", http.StripPrefix("/frontend/", http.FileServer(http.Dir("./frontend"))))
+	mux.Handle("/ws", server.NewWsEchoHttpHandler(cors))
+
+	handler := server.NewCorsMiddleware(mux, cors)
+
 	fmt.Println("Server Start.")
 	err := http.ListenAndServe(":8080", handler)
 	if err != nil {
