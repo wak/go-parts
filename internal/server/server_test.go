@@ -58,6 +58,20 @@ func Test_CorsMiddleware(t *testing.T) {
 	}
 }
 
+func Test_HandlePanicMiddleware(t *testing.T) {
+	handler := NewHandlePanicMiddleware(http.HandlerFunc(panicHandler))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+	res := w.Result()
+
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Errorf("NewHandlePanicMiddleware() not working: %d", res.StatusCode)
+	}
+}
+
 func Test_CorsMiddlewareWithInvalidConfig(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {

@@ -22,6 +22,10 @@ func okHandler(w http.ResponseWriter, _ *http.Request) {
 	io.WriteString(w, "OK")
 }
 
+func panicHandler(_ http.ResponseWriter, _ *http.Request) {
+	panic("panic by panicHandler()")
+}
+
 func (s *HandlerSet) rootHandler(w http.ResponseWriter, _ *http.Request) {
 	io.WriteString(w, "This is Root.")
 	s.common.count++
@@ -44,6 +48,17 @@ func newCountMiddleware(next http.Handler) (http.HandlerFunc, *int) {
 		count += 1
 		next.ServeHTTP(w, r)
 	}), &count
+}
+
+func NewHandlePanicMiddleware(next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if recover() != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func NewCorsMiddleware(next http.Handler, allowedOrigins []string) http.HandlerFunc {
