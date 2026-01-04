@@ -35,7 +35,7 @@ type FuncResponse struct {
 	Handler func(CustomParam, http.ResponseWriter, *http.Request)
 }
 
-type EntryConfig struct {
+type PathConfig struct {
 	Path      string
 	GetMethod Response
 }
@@ -48,6 +48,10 @@ type EntryStatus struct {
 type CustomParam struct {
 	Count int
 }
+
+// func Path(path string) PathConfig {
+
+// }
 
 func F(path string) string {
 	b, err := os.ReadFile(path)
@@ -90,7 +94,7 @@ func handleFunc(resp FuncResponse, count int, w http.ResponseWriter, r *http.Req
 	}
 }
 
-func handleRequest(config EntryConfig, entryStatus *EntryStatus, w http.ResponseWriter, r *http.Request) {
+func handleRequest(config PathConfig, entryStatus *EntryStatus, w http.ResponseWriter, r *http.Request) {
 	var count int
 	var response Response
 
@@ -109,7 +113,7 @@ func handleRequest(config EntryConfig, entryStatus *EntryStatus, w http.Response
 }
 
 func processResponse(
-	config EntryConfig, entryStatus *EntryStatus,
+	config PathConfig, entryStatus *EntryStatus,
 	count int, response Response,
 	w http.ResponseWriter, r *http.Request,
 ) {
@@ -120,6 +124,8 @@ func processResponse(
 		handleJson(res, w, r)
 	case FuncResponse:
 		handleFunc(res, count, w, r)
+	case []Response:
+		processResponse(config, entryStatus, count, LinearResponse{Responses: res}, w, r)
 	case LinearResponse:
 		if _, ok := entryStatus.LinearPosition[r.Method]; !ok {
 			entryStatus.LinearPosition[r.Method] = 0
@@ -131,10 +137,12 @@ func processResponse(
 		}
 		entryStatus.LinearPosition[r.Method]++
 		processResponse(config, entryStatus, count, r2, w, r)
+	default:
+		panic(fmt.Sprintf("Unknown Response type: %T", response))
 	}
 }
 
-func Start(configs []EntryConfig) Server {
+func Start(configs []PathConfig) Server {
 	mux := http.NewServeMux()
 
 	for _, config := range configs {

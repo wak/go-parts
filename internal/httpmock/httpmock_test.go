@@ -8,10 +8,10 @@ import (
 )
 
 func Test_ServerRun(t *testing.T) {
-	server := Start([]EntryConfig{
+	server := Start([]PathConfig{
 		{
 			Path:      "/text",
-			GetMethod: TextResponse{Text: "sample text"},
+			GetMethod: []Response{TextResponse{Text: "sample text"}},
 		},
 		{
 			Path: "/json_r",
