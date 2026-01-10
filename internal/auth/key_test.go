@@ -2,10 +2,13 @@ package auth
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -29,6 +32,20 @@ func mustSuccess(t *testing.T, e error, format string, args ...any) {
 	}
 }
 
+func mustOk(t *testing.T, ok bool, format string, args ...any) {
+	t.Helper()
+	if !ok {
+		if format == "" {
+			format = "Must ok, but failed"
+		}
+		if len(args) == 0 {
+			t.Fatalf("%s", format)
+		} else {
+			t.Fatalf(format, args...)
+		}
+	}
+}
+
 func mustError(t *testing.T, e error, format string, args ...any) {
 	t.Helper()
 	if e == nil {
@@ -41,6 +58,22 @@ func mustError(t *testing.T, e error, format string, args ...any) {
 			t.Fatalf(format, args...)
 		}
 	}
+}
+
+func createKeyIdFromPublicKeyOrPanic(pub crypto.PublicKey) string {
+	keyid, err := CreateKeyIdFromPublicKey(pub)
+	if err != nil {
+		panic("CreateKeyIdFromPublicKey()")
+	}
+	return keyid
+}
+
+func createKeyIdFromSignerOrPanic(signer crypto.Signer) string {
+	keyid, err := CreateKeyIdFromSigner(signer)
+	if err != nil {
+		panic("CreateKeyIdFromSigner()")
+	}
+	return keyid
 }
 
 type testKeyPair struct {
@@ -60,7 +93,7 @@ func makeKeyPair(t *testing.T) testKeyPair {
 	recoveredPubKey, err := ParsePublicKeyPem(pubPem)
 	mustSuccess(t, err, "ParsePublicKeyPem()")
 
-	if !bytes.Equal(pubKey, recoveredPubKey) {
+	if !bytes.Equal(pubKey, recoveredPubKey.(ed25519.PublicKey)) {
 		t.Error("PublicKey PEM convertion failed.")
 	}
 
@@ -70,7 +103,7 @@ func makeKeyPair(t *testing.T) testKeyPair {
 	recoveredPriKey, err := ParsePrivateKeyPem(priPem)
 	mustSuccess(t, err, "ParsePrivateKeyPem()")
 
-	if !bytes.Equal(priKey, recoveredPriKey) {
+	if !bytes.Equal(priKey, recoveredPriKey.(ed25519.PrivateKey)) {
 		t.Error("PrivateKey PEM convertion failed.")
 	}
 
@@ -88,7 +121,7 @@ func makeKeyPairs(t *testing.T, nrPairs int) (keyPairs []testKeyPair, store *Key
 
 	for i := 0; i < nrPairs; i++ {
 		keyPairs[i] = makeKeyPair(t)
-		store.AddPrivateKey(keyPairs[i].privateKey)
+		store.AddSigner(keyPairs[i].privateKey)
 	}
 
 	return keyPairs, store
@@ -118,7 +151,9 @@ func Test_GenerateKeyPair(t *testing.T) {
 }
 
 func Test_generateKeyPair(t *testing.T) {
-	generateKeyPair(errorReader{})
+	randReader = errorReader{}
+	GenerateKeyPair()
+	randReader = rand.Reader
 }
 
 func Test_CreateJwt(t *testing.T) {
@@ -147,6 +182,16 @@ func Test_CreateJwt(t *testing.T) {
 	)
 	mustError(t, err, "")
 	signedString = (*jwt.Token).SignedString
+
+	// 非対応のアルゴリズム
+	jwtStr, err = CreateJwt(
+		&TestSigner{}, "svc", []string{"app"}, "user@example.jp",
+		CreateJwtAppParam{UserId: "user001"},
+	)
+	mustError(t, err, "")
+	if !strings.Contains(err.Error(), "cannot detect") {
+		t.Errorf("invalid error message: %v", err)
+	}
 }
 
 func Test_VerifyJwt(t *testing.T) {
@@ -194,7 +239,7 @@ func Test_VerifyJwt(t *testing.T) {
 				NotBefore: jwt.NewNumericDate(time.Now()),
 			},
 		})
-	token.Header["kid"] = CreateKeyIdFromPrivateKey(p.privateKey)
+	token.Header["kid"] = createKeyIdFromSignerOrPanic(p.privateKey)
 	jwtStr, err = token.SignedString(p.privateKey)
 	mustSuccess(t, err, "")
 	_, err = VerifyJwt(store, jwtStr, issuer, audiences[0])
@@ -217,7 +262,7 @@ func Test_VerifyJwt(t *testing.T) {
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
 			},
 		})
-	token.Header["kid"] = CreateKeyIdFromPrivateKey(p.privateKey)
+	token.Header["kid"] = createKeyIdFromSignerOrPanic(p.privateKey)
 	jwtStr, err = token.SignedString([]byte("secret"))
 	mustSuccess(t, err, "")
 	_, err = VerifyJwt(store, jwtStr, issuer, audiences[0])
@@ -225,6 +270,26 @@ func Test_VerifyJwt(t *testing.T) {
 	if !strings.Contains(err.Error(), "unexpected alg") {
 		t.Errorf("ErrTokenRequiredClaimMissing expected: %v", err)
 	}
+
+	// 非対応の署名アルゴリズム
+	token.Header["kid"] = "test"
+	store.publicKeyMap["test"] = "dummy"
+	jwtStr, err = token.SignedString([]byte("secret"))
+	_, err = VerifyJwt(store, jwtStr, issuer, audiences[0])
+	mustError(t, err, "")
+	if !strings.Contains(err.Error(), "cannot detect") {
+		t.Errorf("invalid error message: %v", err)
+	}
+}
+
+type TestSigner struct{}
+
+func (*TestSigner) Public() crypto.PublicKey {
+	panic("dummy")
+}
+
+func (*TestSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	panic("dummy")
 }
 
 func ReadConfig(fsys fs.FS) (string, error) {
@@ -238,8 +303,8 @@ func ReadConfig(fsys fs.FS) (string, error) {
 func Test_KeyId(t *testing.T) {
 	p := makeKeyPair(t)
 
-	a := CreateKeyIdFromPublicKey(p.publicKey)
-	b := CreateKeyIdFromPrivateKey(p.privateKey)
+	a := createKeyIdFromPublicKeyOrPanic(p.publicKey)
+	b := createKeyIdFromSignerOrPanic(p.privateKey)
 	if a != b {
 		t.Errorf("KeyId different: %s != %s", a, b)
 	}
@@ -248,6 +313,7 @@ func Test_KeyId(t *testing.T) {
 func Test_NewKeyStoreFromFS(t *testing.T) {
 	p1 := makeKeyPair(t)
 	p2 := makeKeyPair(t)
+	p3 := makeKeyPair(t)
 
 	fsys := fstest.MapFS{
 		"pri1.pem": &fstest.MapFile{
@@ -255,6 +321,9 @@ func Test_NewKeyStoreFromFS(t *testing.T) {
 		},
 		"pri2.pem": &fstest.MapFile{
 			Data: []byte(p2.privatePem),
+		},
+		"pub3.pem": &fstest.MapFile{
+			Data: []byte(p3.publicPem),
 		},
 	}
 
@@ -265,8 +334,11 @@ func Test_NewKeyStoreFromFS(t *testing.T) {
 		t.Errorf("Loaded files not 2.")
 	}
 
-	got, ok := store.GetPrivateKey(CreateKeyIdFromPrivateKey(p1.privateKey))
-	if !ok || !bytes.Equal(got, p1.privateKey) {
+	got, ok := store.GetPrivateKey(createKeyIdFromSignerOrPanic(p1.privateKey))
+	mustOk(t, ok, "Failed to get loaded private key.")
+	priKey, ok := got.(ed25519.PrivateKey)
+	mustOk(t, ok, "Failed to get loaded private key.")
+	if !bytes.Equal(priKey, p1.privateKey) {
 		t.Errorf("Failed to get loaded private key. %v != %v", p1.privateKey, got)
 	}
 
@@ -317,14 +389,14 @@ func Test_PEM(t *testing.T) {
 	recoveredPubKey, err := ParsePublicKeyPem(p.publicPem)
 	mustSuccess(t, err, "ParsePublicKeyPem()")
 
-	if !bytes.Equal(p.publicKey, recoveredPubKey) {
+	if !bytes.Equal(p.publicKey, recoveredPubKey.(ed25519.PublicKey)) {
 		t.Error("PublicKey PEM convertion failed.")
 	}
 
 	recoveredPriKey, err := ParsePrivateKeyPem(p.privatePem)
 	mustSuccess(t, err, "ParsePrivateKeyPem()")
 
-	if !bytes.Equal(p.privateKey, recoveredPriKey) {
+	if !bytes.Equal(p.privateKey, recoveredPriKey.(ed25519.PrivateKey)) {
 		t.Error("PrivateKey PEM convertion failed.")
 	}
 
@@ -389,4 +461,37 @@ func Test_PEM(t *testing.T) {
 	recoveredPriKey, err = ParsePrivateKeyPem(p.privatePem)
 	mustError(t, err, "ParsePrivateKeyPem(p.privatePem)-2 must return error")
 	parsePKCS8PrivateKey = x509.ParsePKCS8PrivateKey
+}
+
+func Test_RSA(t *testing.T) {
+	// RSAも扱えることを確認する。（複数アルゴリズム対応確認）
+
+	signer, err := GenerateRSAKeyPair()
+	mustSuccess(t, err, "GenerateRSAKeyPair() failed")
+	priPem, err := PrivateKeyToPem(signer)
+	mustSuccess(t, err, "PrivateKeyToPem() failed")
+	pubPem, err := PublicKeyToPem(signer.Public())
+	mustSuccess(t, err, "PublicKeyToPem() failed")
+	fsys := fstest.MapFS{
+		"pri1.pem": &fstest.MapFile{Data: []byte(priPem)},
+		"pub1.pem": &fstest.MapFile{Data: []byte(pubPem)},
+	}
+
+	store, err := NewKeyStoreFromFS(fsys)
+	mustSuccess(t, err, "NewKeyStore() failed.")
+
+	issuer := "My ID Service"
+	audiences := []string{"app1", "app2"}
+	subject := "user@example.jp"
+	jwtStr, err := CreateJwt(
+		signer, issuer, audiences, subject,
+		CreateJwtAppParam{UserId: "user001"},
+	)
+	mustSuccess(t, err, "")
+
+	claims, err := VerifyJwt(store, jwtStr, issuer, audiences[0])
+	mustSuccess(t, err, "")
+	if claims.UserId != "user001" {
+		t.Errorf("Invalid UserId: %s", claims.UserId)
+	}
 }

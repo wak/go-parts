@@ -1,43 +1,53 @@
 package auth
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
+	"reflect"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	return generateKeyPair(rand.Reader)
+var supportedPublicKeyTypes = map[reflect.Type]struct{}{
+	reflect.TypeOf(ed25519.PublicKey{}): {},
+	reflect.TypeOf(&rsa.PublicKey{}):    {},
 }
 
-func generateKeyPair(random io.Reader) (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	publicKey, privateKey, err := ed25519.GenerateKey(random)
+var supportedPrivateKeyTypes = map[reflect.Type]struct{}{
+	reflect.TypeOf(ed25519.PrivateKey{}): {},
+	reflect.TypeOf(&rsa.PrivateKey{}):    {},
+}
+
+var randReader = rand.Reader
+
+func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	publicKey, privateKey, err := ed25519.GenerateKey(randReader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate key: %v", err)
 	}
 	return publicKey, privateKey, nil
 }
 
-func PublicKeyFromPrivateKey(privateKey ed25519.PrivateKey) ed25519.PublicKey {
-	return privateKey.Public().(ed25519.PublicKey)
-
+func GenerateRSAKeyPair() (crypto.Signer, error) {
+	signer, err := rsa.GenerateKey(randReader, 2048)
+	return signer, err
 }
 
 var marshalPKIXPublicKey = x509.MarshalPKIXPublicKey
 
-func PublicKeyToPem(pub ed25519.PublicKey) ([]byte, error) {
-	if len(pub) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid input %d != %d", len(pub), ed25519.PublicKeySize)
+func PublicKeyToPem(pub crypto.PublicKey) ([]byte, error) {
+	if pub == nil {
+		return nil, fmt.Errorf("Invalid input: %v", pub)
 	}
 
 	der, err := marshalPKIXPublicKey(pub)
@@ -55,7 +65,7 @@ func PublicKeyToPem(pub ed25519.PublicKey) ([]byte, error) {
 
 var parsePKIXPublicKey = x509.ParsePKIXPublicKey
 
-func ParsePublicKeyPem(publicKeyPEM []byte) (ed25519.PublicKey, error) {
+func ParsePublicKeyPem(publicKeyPEM []byte) (crypto.PublicKey, error) {
 	block, _ := pem.Decode(publicKeyPEM)
 	if block == nil {
 		return nil, errors.New("failed to decode PEM")
@@ -69,22 +79,18 @@ func ParsePublicKeyPem(publicKeyPEM []byte) (ed25519.PublicKey, error) {
 		return nil, err
 	}
 
-	pub, ok := key.(ed25519.PublicKey)
-	if !ok {
-		return nil, errors.New("not an ed25519 public key")
+	_, ok := supportedPublicKeyTypes[reflect.TypeOf(key)]
+	if ok {
+		return key, nil
+	} else {
+		return nil, fmt.Errorf("unsupported public key type: %T", key)
 	}
-
-	return pub, nil
 }
 
 var marshalPKCS8PrivateKey = x509.MarshalPKCS8PrivateKey
 
-func PrivateKeyToPem(priv ed25519.PrivateKey) ([]byte, error) {
-	if len(priv) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("Invalid input %d != %d", len(priv), ed25519.PrivateKeySize)
-	}
-
-	der, err := marshalPKCS8PrivateKey(priv)
+func PrivateKeyToPem(signer crypto.Signer) ([]byte, error) {
+	der, err := marshalPKCS8PrivateKey(signer)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +104,7 @@ func PrivateKeyToPem(priv ed25519.PrivateKey) ([]byte, error) {
 
 var parsePKCS8PrivateKey = x509.ParsePKCS8PrivateKey
 
-func ParsePrivateKeyPem(privateKeyPEM []byte) (ed25519.PrivateKey, error) {
+func ParsePrivateKeyPem(privateKeyPEM []byte) (crypto.Signer, error) {
 	block, _ := pem.Decode(privateKeyPEM)
 	if block == nil {
 		return nil, errors.New("failed to decode PEM")
@@ -112,33 +118,59 @@ func ParsePrivateKeyPem(privateKeyPEM []byte) (ed25519.PrivateKey, error) {
 		return nil, err
 	}
 
-	priv, ok := key.(ed25519.PrivateKey)
-	if !ok {
-		return nil, errors.New("Not an ed25519 private key")
+	_, ok := supportedPrivateKeyTypes[reflect.TypeOf(key)]
+	if ok {
+		priv, ok := key.(crypto.Signer)
+		if !ok {
+			return nil, fmt.Errorf("private key is not crypto.Signer %T", key)
+		}
+		return priv, nil
+	} else {
+		return nil, fmt.Errorf("unsupported private key type: %T", key)
 	}
-
-	return priv, nil
 }
 
-func CreateKeyIdFromPublicKey(pub ed25519.PublicKey) string {
-	sum := sha256.Sum256(pub)
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+func CreateKeyIdFromPublicKey(pub crypto.PublicKey) (string, error) {
+	switch pubKey := pub.(type) {
+	case ed25519.PublicKey:
+		sum := sha256.Sum256(pubKey)
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	default:
+		return "", fmt.Errorf("failed to create key id: %T", pub)
+	}
 }
 
-func CreateKeyIdFromPrivateKey(pri ed25519.PrivateKey) string {
-	sum := sha256.Sum256(PublicKeyFromPrivateKey(pri))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+func CreateKeyIdFromSigner(signer crypto.Signer) (string, error) {
+	switch priKey := signer.(type) {
+	case ed25519.PrivateKey:
+		sum := sha256.Sum256(priKey.Public().(ed25519.PublicKey))
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+
+	case *rsa.PrivateKey:
+		pub := priKey.Public().(*rsa.PublicKey)
+
+		der, err := x509.MarshalPKIXPublicKey(pub)
+		if err != nil {
+			panic(fmt.Sprintf("failed to marshal rsa public key: %v", err))
+		}
+
+		sum := sha256.Sum256(der)
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+
+	default:
+		return "", fmt.Errorf("failed to create key id: %T", signer)
+	}
 }
 
 type KeyStore struct {
-	privateKeyMap map[string]ed25519.PrivateKey
-	publicKeyMap  map[string]ed25519.PublicKey
+	privateKeyMap map[string]crypto.Signer
+	publicKeyMap  map[string]crypto.PublicKey
 }
 
 func NewKeyStore() *KeyStore {
 	return &KeyStore{
-		privateKeyMap: make(map[string]ed25519.PrivateKey),
-		publicKeyMap:  make(map[string]ed25519.PublicKey),
+		privateKeyMap: make(map[string]crypto.Signer),
+		publicKeyMap:  make(map[string]crypto.PublicKey),
 	}
 }
 
@@ -155,37 +187,69 @@ func NewKeyStoreFromFS(fsys fs.FS) (*KeyStore, error) {
 		if err != nil {
 			return err
 		}
-		priKey, err := ParsePrivateKeyPem(data)
+		err = store.AddPem(data)
 		if err != nil {
 			return err
 		}
-		store.AddPrivateKey(priKey)
 		return nil
 	})
 	return store, err
 }
 
-func (s *KeyStore) AddPrivateKey(privateKey ed25519.PrivateKey) {
-	keyId := CreateKeyIdFromPrivateKey(privateKey)
-	s.privateKeyMap[keyId] = privateKey
-	s.publicKeyMap[keyId] = PublicKeyFromPrivateKey(privateKey)
+func (s *KeyStore) AddSigner(signer crypto.Signer) error {
+	keyId, err := CreateKeyIdFromSigner(signer)
+	if err != nil {
+		return err
+	}
+	s.privateKeyMap[keyId] = signer
+	s.publicKeyMap[keyId] = signer.Public()
+	return nil
 }
 
-func (s *KeyStore) AddPublicKey(publicKey ed25519.PublicKey) {
-	keyId := CreateKeyIdFromPublicKey(publicKey)
+func (s *KeyStore) AddPublicKey(publicKey crypto.PublicKey) error {
+	keyId, err := CreateKeyIdFromPublicKey(publicKey)
+	if err != nil {
+		return err
+	}
 	s.publicKeyMap[keyId] = publicKey
+	return nil
 }
 
-func (s *KeyStore) GetPrivateKey(keyId string) (ed25519.PrivateKey, bool) {
+func (s *KeyStore) AddPem(pemBytes []byte) error {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return errors.New("failed to decode PEM")
+	}
+	switch block.Type {
+	case "PRIVATE KEY":
+		signer, err := ParsePrivateKeyPem(pemBytes)
+		if err != nil {
+			return err
+		}
+		s.AddSigner(signer)
+		return nil
+
+	case "PUBLIC KEY":
+		signer, err := ParsePublicKeyPem(pemBytes)
+		if err != nil {
+			return err
+		}
+		s.AddPublicKey(signer)
+		return nil
+	}
+	return fmt.Errorf("PEM type is not PRIVATE KEY or PUBLIC KEY: %s", block.Type)
+}
+
+func (s *KeyStore) GetPrivateKey(keyId string) (crypto.Signer, bool) {
 	entry, ok := s.privateKeyMap[keyId]
 	if ok {
 		return entry, true
 	} else {
-		return *new(ed25519.PrivateKey), false
+		return nil, false
 	}
 }
 
-func (s *KeyStore) GetPublicKey(keyId string) (ed25519.PublicKey, bool) {
+func (s *KeyStore) GetPublicKey(keyId string) (crypto.PublicKey, bool) {
 	entry, ok := s.publicKeyMap[keyId]
 
 	if ok {
@@ -210,8 +274,21 @@ type CreateJwtAppParam struct {
 
 var signedString = (*jwt.Token).SignedString
 
+func detectSignedMethod(key any) (jwt.SigningMethod, error) {
+	switch key.(type) {
+	case ed25519.PrivateKey, ed25519.PublicKey:
+		return jwt.SigningMethodEdDSA, nil
+
+	case *rsa.PrivateKey, *rsa.PublicKey:
+		return jwt.SigningMethodRS256, nil
+
+	default:
+		return nil, fmt.Errorf("cannot detect algo for %T", key)
+	}
+}
+
 func CreateJwt(
-	privateKey ed25519.PrivateKey,
+	signer crypto.Signer,
 	issuer string,
 	audience []string,
 	subject string,
@@ -229,10 +306,18 @@ func CreateJwt(
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	token.Header["kid"] = CreateKeyIdFromPrivateKey(privateKey)
+	alg, err := detectSignedMethod(signer)
+	if err != nil {
+		return "", err
+	}
+	token := jwt.NewWithClaims(alg, claims)
+	kid, err := CreateKeyIdFromSigner(signer)
+	if err != nil {
+		return "", err
+	}
+	token.Header["kid"] = kid
 
-	signed, err := signedString(token, privateKey)
+	signed, err := signedString(token, signer)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign jwt: %w", err)
 	}
@@ -252,15 +337,19 @@ func VerifyJwt(
 		tokenString,
 		claims,
 		func(token *jwt.Token) (any, error) {
-			if token.Method.Alg() != jwt.SigningMethodEdDSA.Alg() {
-				return nil, fmt.Errorf("unexpected alg")
-			}
 			kid, _ := token.Header["kid"].(string)
-			priKey, ok := store.GetPublicKey(kid)
+			pubKey, ok := store.GetPublicKey(kid)
 			if !ok {
-				return nil, fmt.Errorf("unknown kid: %s", kid)
+				return nil, fmt.Errorf("key for %s not found", kid)
 			}
-			return priKey, nil
+			alg, err := detectSignedMethod(pubKey)
+			if err != nil {
+				return "", err
+			}
+			if token.Method.Alg() != alg.Alg() {
+				return nil, fmt.Errorf("unexpected alg %s", token.Method.Alg())
+			}
+			return pubKey, nil
 		},
 		jwt.WithExpirationRequired(),
 		jwt.WithAllAudiences(audience),
