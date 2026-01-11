@@ -215,16 +215,14 @@ func (s *KeyStore) AddPem(pemBytes []byte) error {
 		if err != nil {
 			return err
 		}
-		s.AddSigner(signer)
-		return nil
+		return s.AddSigner(signer)
 
 	case "PUBLIC KEY":
 		signer, err := ParsePublicKeyPem(pemBytes)
 		if err != nil {
 			return err
 		}
-		s.AddPublicKey(signer)
-		return nil
+		return s.AddPublicKey(signer)
 	}
 	return fmt.Errorf("PEM type is not PRIVATE KEY or PUBLIC KEY: %s", block.Type)
 }
@@ -244,11 +242,11 @@ func (s *KeyStore) GetPublicKey(keyId string) (crypto.PublicKey, bool) {
 	if ok {
 		return entry, true
 	} else {
-		return *new(ed25519.PublicKey), false
+		return nil, false
 	}
 }
 
-func (s *KeyStore) Len() int {
+func (s *KeyStore) CountPrivateKeys() int {
 	return len(s.privateKeyMap)
 }
 

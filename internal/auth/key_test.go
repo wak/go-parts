@@ -332,7 +332,7 @@ func Test_NewKeyStoreFromFS(t *testing.T) {
 	store, err := NewKeyStoreFromFS(fsys)
 	mustSuccess(t, err, "NewKeyStore() failed.")
 
-	if store.Len() != 2 {
+	if store.CountPrivateKeys() != 2 {
 		t.Errorf("Loaded files not 2.")
 	}
 
