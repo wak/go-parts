@@ -5,11 +5,13 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -493,5 +495,52 @@ func Test_RSA(t *testing.T) {
 	mustSuccess(t, err, "")
 	if claims.UserId != "user001" {
 		t.Errorf("Invalid UserId: %s", claims.UserId)
+	}
+}
+
+func generateSigner(ty reflect.Type) (crypto.Signer, error) {
+	switch ty {
+	case reflect.TypeOf(ed25519.PrivateKey{}):
+		_, priKey, err := GenerateKeyPair()
+		if err != nil {
+			return nil, err
+		}
+		return priKey, nil
+	case reflect.TypeOf(&rsa.PrivateKey{}):
+		return GenerateRSAKeyPair()
+	default:
+		return nil, fmt.Errorf("unsupported type: %T", ty)
+	}
+}
+
+func Test_Supported_KeyTypes(t *testing.T) {
+	for ty := range supportedPrivateKeyTypes {
+		signer, err := generateSigner(ty)
+		mustSuccess(t, err, "GenerateSigner(%v) failed.", ty)
+
+		// PEM変換
+		pem, err := PrivateKeyToPem(signer)
+		mustSuccess(t, err, "PrivateKeyToPem(%v) failed.", ty)
+		_, err = ParsePrivateKeyPem(pem)
+		mustSuccess(t, err, "ParsePrivateKeyPem(%v) failed.", ty)
+
+		// PEM読み込み
+		pubKey := signer.Public()
+		pem, err = PublicKeyToPem(pubKey)
+		mustSuccess(t, err, "PublicKeyToPem(%v) failed.", ty)
+		_, err = ParsePublicKeyPem(pem)
+		mustSuccess(t, err, "ParsePublicKeyPem(%v) failed.", ty)
+
+		// KeyId生成
+		_, err = CreateKeyIdFromPublicKey(pubKey)
+		mustSuccess(t, err, "CreateKeyIdFromPublicKey(%v) failed.", ty)
+		_, err = CreateKeyIdFromSigner(signer)
+		mustSuccess(t, err, "CreateKeyIdFromSigner(%v) failed.", ty)
+
+		// detectSignedMethod
+		_, err = detectSignedMethod(signer)
+		mustSuccess(t, err, "detectSignedMethod(%v:signer) failed.", ty)
+		_, err = detectSignedMethod(pubKey)
+		mustSuccess(t, err, "detectSignedMethod(%v:pubKey) failed.", ty)
 	}
 }

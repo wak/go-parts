@@ -135,31 +135,20 @@ func CreateKeyIdFromPublicKey(pub crypto.PublicKey) (string, error) {
 	case ed25519.PublicKey:
 		sum := sha256.Sum256(pubKey)
 		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+	case *rsa.PublicKey:
+		der, err := x509.MarshalPKIXPublicKey(pub)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal rsa public key: %v", err)
+		}
+		sum := sha256.Sum256(der)
+		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
 	default:
 		return "", fmt.Errorf("failed to create key id: %T", pub)
 	}
 }
 
 func CreateKeyIdFromSigner(signer crypto.Signer) (string, error) {
-	switch priKey := signer.(type) {
-	case ed25519.PrivateKey:
-		sum := sha256.Sum256(priKey.Public().(ed25519.PublicKey))
-		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
-
-	case *rsa.PrivateKey:
-		pub := priKey.Public().(*rsa.PublicKey)
-
-		der, err := x509.MarshalPKIXPublicKey(pub)
-		if err != nil {
-			panic(fmt.Sprintf("failed to marshal rsa public key: %v", err))
-		}
-
-		sum := sha256.Sum256(der)
-		return base64.RawURLEncoding.EncodeToString(sum[:]), nil
-
-	default:
-		return "", fmt.Errorf("failed to create key id: %T", signer)
-	}
+	return CreateKeyIdFromPublicKey(signer.Public())
 }
 
 type KeyStore struct {
