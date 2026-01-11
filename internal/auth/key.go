@@ -30,12 +30,12 @@ var supportedPrivateKeyTypes = map[reflect.Type]struct{}{
 
 var randReader = rand.Reader
 
-func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	publicKey, privateKey, err := ed25519.GenerateKey(randReader)
+func GenerateKey() (ed25519.PrivateKey, error) {
+	_, privateKey, err := ed25519.GenerateKey(randReader)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate key: %v", err)
+		return nil, fmt.Errorf("failed to generate key: %v", err)
 	}
-	return publicKey, privateKey, nil
+	return privateKey, nil
 }
 
 func GenerateRSAKeyPair() (crypto.Signer, error) {
