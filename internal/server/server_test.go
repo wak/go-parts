@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"go-parts/internal/testutil"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -234,7 +235,7 @@ func Test_HandlerWithServer(t *testing.T) {
 			t.Errorf("Failed to read response of %s", funcName)
 		}
 
-		res.Body.Close()
+		testutil.MustSuccess(t, res.Body.Close())
 
 		if res.StatusCode != http.StatusOK {
 			t.Errorf("Handler %s response code != 200 (%d)", funcName, res.StatusCode)
@@ -279,7 +280,7 @@ func Test_RoutingWithServer(t *testing.T) {
 			t.Errorf("Failed to read response of %s", data.path)
 		}
 
-		res.Body.Close()
+		testutil.MustSuccess(t, res.Body.Close())
 
 		if res.StatusCode != http.StatusOK || string(responseBody) != data.expectedBody {
 			t.Fatalf("status = %d, body = %s (expect %s)", res.StatusCode, string(responseBody), data.expectedBody)

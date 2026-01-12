@@ -3,6 +3,7 @@ package httpmock
 import (
 	"errors"
 	"fmt"
+	"go-parts/internal/testutil"
 	"io"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ func request(t *testing.T, method string, url string, path string, body string) 
 	}
 
 	responseBody, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	testutil.MustSuccess(t, res.Body.Close())
 	if err != nil {
 		t.Fatalf("Failed to read response of %s: %v", path, err)
 	}
@@ -60,11 +61,11 @@ func Test_helper(t *testing.T) {
 			Text("text 3"),
 		Path("/handler_1").
 			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
-				io.WriteString(w, fmt.Sprintf("handler_1 %d", c.Count))
+				_, _ = io.WriteString(w, fmt.Sprintf("handler_1 %d", c.Count))
 			}),
 		Path("/handler_2").
 			Handler(func(c CustomParam, w http.ResponseWriter, _ *http.Request) {
-				io.WriteString(w, fmt.Sprintf("handler_2 %d", c.Count))
+				_, _ = io.WriteString(w, fmt.Sprintf("handler_2 %d", c.Count))
 			}),
 	})
 	defer server.Close()

@@ -51,7 +51,7 @@ func NewWsEchoHttpHandler(allowedOrigins []string) http.Handler {
 
 func newWsEchoWebSocketHandler(inout wsIO) websocket.Handler {
 	return func(ws *websocket.Conn) {
-		defer ws.Close()
+		defer func() { _ = ws.Close() }()
 		log.Println("WebSocket echo handler start.")
 
 		for {

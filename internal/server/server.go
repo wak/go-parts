@@ -19,7 +19,7 @@ type HandlerSet struct {
 }
 
 func okHandler(w http.ResponseWriter, _ *http.Request) {
-	io.WriteString(w, "OK")
+	_, _ = io.WriteString(w, "OK")
 }
 
 func panicHandler(_ http.ResponseWriter, _ *http.Request) {
@@ -27,12 +27,12 @@ func panicHandler(_ http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *HandlerSet) rootHandler(w http.ResponseWriter, _ *http.Request) {
-	io.WriteString(w, "This is Root.")
+	_, _ = io.WriteString(w, "This is Root.")
 	s.common.count++
 }
 
 func (s *HandlerSet) showCount(w http.ResponseWriter, _ *http.Request) {
-	io.WriteString(w, fmt.Sprintf("%d", s.common.count))
+	_, _ = io.WriteString(w, fmt.Sprintf("%d", s.common.count))
 }
 
 func newHandlerSet(initalCount int) *HandlerSet {
@@ -141,7 +141,7 @@ func NewSecretHealthCheckHandlerFunc(secret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sentSecret := r.URL.Query().Get("secret")
 		if secret == sentSecret {
-			io.WriteString(w, "Healthy")
+			_, _ = io.WriteString(w, "Healthy")
 		} else {
 			http.NotFound(w, r)
 		}

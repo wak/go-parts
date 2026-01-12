@@ -16,46 +16,14 @@ import (
 	"testing/fstest"
 	"time"
 
+	"go-parts/internal/testutil"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func mustSuccess(t *testing.T, e error, args ...any) {
-	t.Helper()
-	if e != nil {
-		switch len(args) {
-		case 0:
-			t.Fatalf("Must success, but failed: %v", e)
-		case 1:
-			t.Fatalf("%s: %v", args[0], e)
-		default:
-			t.Fatalf(args[0].(string), args[1:]...)
-		}
-	}
-}
-
-func mustOk(t *testing.T, ok bool, args ...any) {
-	t.Helper()
-	if !ok {
-		switch len(args) {
-		case 0:
-			t.Fatal("Must ok, but failed.")
-		default:
-			t.Fatalf(args[0].(string), args[1:]...)
-		}
-	}
-}
-
-func mustError(t *testing.T, e error, args ...any) {
-	t.Helper()
-	if e == nil {
-		switch len(args) {
-		case 0:
-			t.Fatal("Must error, but succeed.")
-		default:
-			t.Fatalf(args[0].(string), args[1:]...)
-		}
-	}
-}
+var mustSuccess = testutil.MustSuccess
+var mustError = testutil.MustError
+var mustOk = testutil.MustOk
 
 func createKeyIdFromPublicKeyOrPanic(pub crypto.PublicKey) string {
 	keyid, err := CreateKeyIdFromPublicKey(pub)
@@ -112,14 +80,6 @@ func makeKeyPair(t *testing.T, ty reflect.Type) testKeyPair {
 		privateKey: priKey,
 		publicPem:  pubPem,
 		privatePem: priPem,
-	}
-}
-
-//lint:ignore U1000 Helper
-func expectPanic(t *testing.T) {
-	t.Helper()
-	if r := recover(); r == nil {
-		t.Fatalf("expected panic, but did not panic")
 	}
 }
 
@@ -186,7 +146,8 @@ func Test_VerifyJwt(t *testing.T) {
 	for ty := range supportedPrivateKeyTypes {
 		p := makeKeyPair(t, ty)
 		store := NewKeyStore()
-		store.AddPublicKey(p.publicKey)
+		err := store.AddPublicKey(p.publicKey)
+		mustSuccess(t, err)
 
 		issuer := "My ID Service"
 		audiences := []string{"app1", "app2"}
