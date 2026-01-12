@@ -47,7 +47,7 @@ var marshalPKIXPublicKey = x509.MarshalPKIXPublicKey
 
 func PublicKeyToPem(pub crypto.PublicKey) ([]byte, error) {
 	if pub == nil {
-		return nil, fmt.Errorf("Invalid input: %v", pub)
+		return nil, fmt.Errorf("invalid input: %v", pub)
 	}
 
 	der, err := marshalPKIXPublicKey(pub)

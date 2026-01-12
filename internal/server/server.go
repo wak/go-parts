@@ -12,8 +12,8 @@ type Common struct {
 	count int
 }
 
-// Handlerが何かしらデータに依存する場合は、
-// HandlerをメソッドとしてMuxに渡すとよい。
+// HandlerSet は、Handlerに情報を持たせる例。
+// Handlerが何かしらデータに依存する場合は、Handlerをメソッドとして実装してMuxに渡すとよい。
 type HandlerSet struct {
 	common *Common
 }
@@ -135,10 +135,6 @@ func normalizeOrigin(origin string) string {
 		}
 	}
 	return u.Scheme + "://" + host + ":" + port
-}
-
-type SecretHealthCheckHandler struct {
-	secret string
 }
 
 func NewSecretHealthCheckHandlerFunc(secret string) http.HandlerFunc {

@@ -50,8 +50,7 @@ func Test_WrapStack(t *testing.T) {
 }
 
 func Test_ErrorFormat(t *testing.T) {
-	e := NewError("stack error")
-	e = fmt.Errorf("wrapped %s", NewError("stack error"))
+	e := fmt.Errorf("wrapped %s", NewError("stack error"))
 	formatted := fmt.Sprintf("wrapped %s", e)
 	if !strings.Contains(formatted, "stack error") ||
 		!strings.Contains(formatted, "Test_ErrorFormat") ||

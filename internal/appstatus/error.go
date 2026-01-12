@@ -75,9 +75,7 @@ func findErrorWithStack(err error) *errorWithStack {
 
 		// Join
 		if m, ok := e.(interface{ Unwrap() []error }); ok {
-			for _, child := range m.Unwrap() {
-				errors = append(errors, child)
-			}
+			errors = append(errors, m.Unwrap()...)
 		}
 
 		// Wrap
@@ -93,7 +91,7 @@ func findErrorWithStack(err error) *errorWithStack {
 		return nil
 	}
 
-	var deepestError *errorWithStack = errorWithStacks[0]
+	deepestError := errorWithStacks[0]
 	for _, e := range errorWithStacks {
 		if len(deepestError.Stack) < len(e.Stack) {
 			deepestError = e
@@ -145,9 +143,7 @@ func DumpError(err error) string {
 
 		// Join
 		if m, ok := e.(interface{ Unwrap() []error }); ok {
-			for _, child := range m.Unwrap() {
-				errors = append(errors, child)
-			}
+			errors = append(errors, m.Unwrap()...)
 		}
 
 		// Wrap
