@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <title>HTTP Chunkded Transfer</title>
+    </head>
+    <body>
+        <h1>Streaming Sample</h1>
+        <button id="startButton">開始</button>
+        <pre id="output"></pre>
+        
+        <script>
+            const startButton = document.getElementById("startButton");
+            const output = document.getElementById("output");
+            
+            startButton.addEventListener("click", async () => {
+                output.textContent = "";
+                
+                const response = await fetch("/greetingStream");
+                if (!response.ok) {
+                    output.textContent = "HTTP error: " + response.status;
+                    return;
+                }
+                
+                if (!response.body) {
+                    output.textContent = "response.body is not available";
+                    return;
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const result = await reader.read();
+                    
+                    if (result.done) {
+                        break;
+                    }
+                    
+                    output.textContent += decoder.decode(result.value, { stream: true });
+                }
+                
+                output.textContent += decoder.decode();
+            });
+        </script>
+    </body>
+</html>

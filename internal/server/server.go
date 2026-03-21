@@ -155,6 +155,7 @@ func CreateMux() *http.ServeMux {
 	mux.HandleFunc("/", handlerSet.rootHandler)
 	mux.HandleFunc("/show", handlerSet.showCount)
 	mux.HandleFunc("/healthcheck", NewSecretHealthCheckHandlerFunc("sample"))
+	mux.HandleFunc("/greetingStream", greetingStreamHandler)
 
 	return mux
 }
